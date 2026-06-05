@@ -4,4 +4,4 @@ SUPPORTED_BACKENDS = frozenset({"sglang"})
 SUPPORTED_KV_TRANSFERS = frozenset({"nixl"})
 SUPPORTED_CLOUDS = frozenset({"lambda", "coreweave", "local"})
 
-GPU_SPEC_PATTERN = r"^\d+x[A-Za-z0-9][A-Za-z0-9._-]*$"
+GPU_SPEC_PATTERN = r"^[1-9]\d*x[A-Za-z0-9][A-Za-z0-9._-]*$"

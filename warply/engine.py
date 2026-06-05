@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from warply._constants import SUPPORTED_BACKENDS, SUPPORTED_CLOUDS, SUPPORTED_KV_TRANSFERS
@@ -25,9 +25,9 @@ class DisaggEngine:
     backend: str = "sglang"
     kv_transfer: str = "nixl"
     cloud: str = "local"
-    _state: EngineState = EngineState.PENDING
-    _prefill_replicas: int | None = None
-    _decode_replicas: int | None = None
+    _state: EngineState = field(default=EngineState.PENDING, init=False, repr=False)
+    _prefill_replicas: int | None = field(default=None, init=False, repr=False)
+    _decode_replicas: int | None = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
         if not self.model.strip():
@@ -54,18 +54,13 @@ class DisaggEngine:
         if prefill is None and decode is None:
             raise ValidationError("scale() requires at least one of prefill= or decode=.")
 
+        if prefill is not None and prefill < 1:
+            raise ValidationError(f"prefill replicas must be >= 1, got {prefill}.")
+        if decode is not None and decode < 1:
+            raise ValidationError(f"decode replicas must be >= 1, got {decode}.")
+
         if self._state not in {EngineState.READY, EngineState.SCALING}:
             raise NotReadyError("scale() requires a running deployment. Call up() first.")
-
-        if prefill is not None:
-            if prefill < 1:
-                raise ValidationError(f"prefill replicas must be >= 1, got {prefill}.")
-            self._prefill_replicas = prefill
-
-        if decode is not None:
-            if decode < 1:
-                raise ValidationError(f"decode replicas must be >= 1, got {decode}.")
-            self._decode_replicas = decode
 
         raise NotImplementedError(
             "DisaggEngine.scale() is not implemented yet. "

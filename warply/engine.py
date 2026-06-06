@@ -8,6 +8,7 @@ from warply.compiler import compile
 from warply.compiler.plan import DeploymentPlan
 from warply.exceptions import NotReadyError, ValidationError
 from warply.pool import Pool
+from warply.runtime.client import completion_content
 from warply.runtime.factory import create_runtime
 from warply.runtime.lifecycle import state_after_down
 from warply.runtime.yaml import dump_yaml
@@ -170,7 +171,7 @@ class DisaggEngine:
             messages=[{"role": "user", "content": prompt}],
             **kwargs,
         )
-        return response.choices[0].message.content
+        return completion_content(response)
 
     def export_yaml(self) -> str:
         """Emit a raw deployment manifest for power users."""

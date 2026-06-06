@@ -6,7 +6,23 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from warply.exceptions import WarplyError
+from warply.exceptions import HTTPClientError
+
+_ALLOWED_COMPLETION_KWARGS = frozenset(
+    {
+        "frequency_penalty",
+        "logprobs",
+        "max_tokens",
+        "n",
+        "presence_penalty",
+        "response_format",
+        "seed",
+        "stop",
+        "temperature",
+        "top_k",
+        "top_p",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -50,13 +66,9 @@ class MockOpenAIClient:
         self.chat = _Chat()
 
 
-class HTTPClientError(WarplyError, RuntimeError):
-    """Raised when an OpenAI-compatible HTTP endpoint rejects a request."""
-
-
 class _HTTPChatCompletions:
-    def __init__(self, *, base_url: str, timeout: float) -> None:
-        self.base_url = _normalize_base_url(base_url)
+    def __init__(self, *, api_base: str, timeout: float) -> None:
+        self.api_base = api_base
         self.timeout = timeout
 
     def create(
@@ -69,11 +81,11 @@ class _HTTPChatCompletions:
         payload = {
             "model": model,
             "messages": messages,
-            **kwargs,
+            **_validate_completion_kwargs(kwargs),
         }
         body = json.dumps(payload).encode("utf-8")
         request = Request(
-            f"{self.base_url}/chat/completions",
+            f"{self.api_base}/chat/completions",
             data=body,
             headers={"Content-Type": "application/json"},
             method="POST",
@@ -95,8 +107,8 @@ class _HTTPChatCompletions:
 
 
 class _HTTPChat:
-    def __init__(self, *, base_url: str, timeout: float) -> None:
-        self.completions = _HTTPChatCompletions(base_url=base_url, timeout=timeout)
+    def __init__(self, *, api_base: str, timeout: float) -> None:
+        self.completions = _HTTPChatCompletions(api_base=api_base, timeout=timeout)
 
 
 class HTTPOpenAIClient:
@@ -104,22 +116,78 @@ class HTTPOpenAIClient:
 
     def __init__(self, *, base_url: str, timeout: float = 120.0) -> None:
         self.base_url = base_url
-        self.chat = _HTTPChat(base_url=base_url, timeout=timeout)
+        self.api_base = normalize_base_url(base_url)
+        self.chat = _HTTPChat(api_base=self.api_base, timeout=timeout)
 
 
-def _normalize_base_url(base_url: str) -> str:
+def normalize_base_url(base_url: str) -> str:
     normalized = base_url.rstrip("/")
     if not normalized.endswith("/v1"):
         normalized = f"{normalized}/v1"
     return normalized
 
 
-def _parse_completion_response(response_body: str) -> _CompletionResponse:
-    data = json.loads(response_body)
-    choices = [
-        _Choice(message=_Message(content=choice["message"]["content"]))
-        for choice in data.get("choices", [])
-    ]
-    if not choices:
+def completion_content(response: _CompletionResponse) -> str:
+    """Return validated text content from the first completion choice."""
+    if not response.choices:
         raise HTTPClientError("OpenAI-compatible endpoint returned no choices.")
+
+    content = response.choices[0].message.content
+    if not content.strip():
+        raise HTTPClientError("OpenAI-compatible endpoint returned empty completion content.")
+    return content
+
+
+def _validate_completion_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
+    if kwargs.get("stream"):
+        raise HTTPClientError("streaming completions are not supported yet.")
+
+    unknown = sorted(set(kwargs) - _ALLOWED_COMPLETION_KWARGS)
+    if unknown:
+        options = ", ".join(sorted(_ALLOWED_COMPLETION_KWARGS))
+        raise HTTPClientError(
+            f"unsupported completion kwargs: {', '.join(unknown)}; allowed: {options}."
+        )
+    return kwargs
+
+
+def _parse_completion_response(response_body: str) -> _CompletionResponse:
+    try:
+        data = json.loads(response_body)
+    except json.JSONDecodeError as exc:
+        raise HTTPClientError(
+            f"OpenAI-compatible endpoint returned invalid JSON: {exc}"
+        ) from exc
+
+    if not isinstance(data, dict):
+        raise HTTPClientError("OpenAI-compatible endpoint returned a non-object JSON payload.")
+
+    raw_choices = data.get("choices")
+    if not raw_choices:
+        raise HTTPClientError("OpenAI-compatible endpoint returned no choices.")
+    if not isinstance(raw_choices, list):
+        raise HTTPClientError("OpenAI-compatible endpoint returned invalid choices payload.")
+
+    choices: list[_Choice] = []
+    for index, choice in enumerate(raw_choices):
+        if not isinstance(choice, dict):
+            raise HTTPClientError(
+                f"OpenAI-compatible endpoint returned invalid choice at index {index}."
+            )
+        message = choice.get("message")
+        if not isinstance(message, dict):
+            raise HTTPClientError(
+                f"OpenAI-compatible endpoint returned invalid message at index {index}."
+            )
+        content = message.get("content")
+        if content is None:
+            raise HTTPClientError(
+                f"OpenAI-compatible endpoint returned null content at index {index}."
+            )
+        if not isinstance(content, str):
+            raise HTTPClientError(
+                f"OpenAI-compatible endpoint returned non-text content at index {index}."
+            )
+        choices.append(_Choice(message=_Message(content=content)))
+
     return _CompletionResponse(choices=choices)

@@ -33,6 +33,7 @@ def test_lambda_sglang_e2e():
     try:
         engine.up()
         response = engine.generate("hello")
-        assert response
+        assert isinstance(response, str)
+        assert response.strip()
     finally:
         engine.down()

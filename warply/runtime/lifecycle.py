@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 
 from warply.compiler.plan import DeploymentPlan
@@ -96,7 +97,7 @@ class Runtime:
 
     def client(self) -> HTTPOpenAIClient | MockOpenAIClient:
         base_url = self.endpoint or self.plan.routing.endpoint
-        if self.plan.cloud == "local":
+        if self.plan.cloud == "local" or os.environ.get("WARPLY_SKYPILOT_DRY_RUN") == "1":
             return MockOpenAIClient(base_url=base_url)
         return HTTPOpenAIClient(base_url=base_url)
 

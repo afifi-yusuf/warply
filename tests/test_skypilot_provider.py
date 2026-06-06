@@ -5,6 +5,7 @@ import pytest
 import warply as wp
 from warply.exceptions import ValidationError
 from warply.providers.skypilot import SkyPilotProvider
+from warply.runtime.client import HTTPOpenAIClient
 from warply.types import EngineState
 
 
@@ -41,6 +42,8 @@ def test_lambda_up_dry_run(monkeypatch):
     assert engine.deployed_plan() is not None
     assert engine.deployed_plan().routing.prefill_base_url.startswith("http://dryrun.")
     assert engine.deployed_plan().routing.decode_base_url.startswith("http://dryrun.")
+    assert isinstance(engine.client(), HTTPOpenAIClient)
+    assert engine.client().base_url == status.endpoint
 
     engine.down()
     assert engine.status().state is EngineState.STOPPED

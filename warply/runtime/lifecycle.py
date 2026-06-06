@@ -6,7 +6,7 @@ from warply.compiler.plan import DeploymentPlan
 from warply.providers.base import Node, ProviderPlugin
 from warply.providers.local_mock import LocalMockProvider
 from warply.router.mock import MockRouter
-from warply.runtime.client import MockOpenAIClient
+from warply.runtime.client import HTTPOpenAIClient, MockOpenAIClient
 from warply.runtime.routing import node_http_url, primary_pool_url, resolve_routing
 from warply.types import EngineState
 
@@ -94,8 +94,11 @@ class Runtime:
         self.router_nodes = []
         self.endpoint = None
 
-    def client(self) -> MockOpenAIClient:
-        return MockOpenAIClient(base_url=self.endpoint or self.plan.routing.endpoint)
+    def client(self) -> HTTPOpenAIClient | MockOpenAIClient:
+        base_url = self.endpoint or self.plan.routing.endpoint
+        if self.plan.cloud == "local":
+            return MockOpenAIClient(base_url=base_url)
+        return HTTPOpenAIClient(base_url=base_url)
 
     def healthy_prefill(self) -> int:
         return sum(node.healthy for node in self.provider.status(self.prefill_nodes))

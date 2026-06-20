@@ -172,8 +172,8 @@ def test_cloud_generate_posts_to_router(monkeypatch):
         return ClusterLaunch(
             cluster_name=cluster_name,
             router_host="10.0.0.1",
-            prefill_host="10.0.0.1",
-            decode_host="10.0.0.2",
+            prefill_hosts=["10.0.0.1"],
+            decode_hosts=["10.0.0.2", "10.0.0.3"],
         )
 
     monkeypatch.setattr(SkyPilotProvider, "_launch_cluster", fake_launch)
@@ -191,7 +191,7 @@ def test_cloud_generate_posts_to_router(monkeypatch):
     engine = wp.DisaggEngine(
         model="meta-llama/Llama-3.1-8B",
         prefill=wp.Pool("1xH100", replicas=1),
-        decode=wp.Pool("1xH100", replicas=1),
+        decode=wp.Pool("1xH100", replicas=2),
         cloud="lambda",
     )
 
@@ -199,7 +199,7 @@ def test_cloud_generate_posts_to_router(monkeypatch):
         engine.up()
         assert len(launches) == 1
         assert launches[0]["cluster_name"].endswith("-disagg")
-        assert "num_nodes: 2" in launches[0]["yaml"]
+        assert "num_nodes: 3" in launches[0]["yaml"]
         assert isinstance(engine.client(), HTTPOpenAIClient)
         assert engine.generate("hello") == "cloud hello"
         assert captured["url"] == "http://10.0.0.1:8000/v1/chat/completions"

@@ -5,6 +5,7 @@ import pytest
 import warply as wp
 from warply.exceptions import ValidationError
 from warply.providers.skypilot_task import (
+    build_cluster_placement,
     build_disagg_cluster_task_yaml,
     build_router_task_yaml,
     build_worker_task_yaml,
@@ -59,17 +60,28 @@ def test_router_task_yaml_uses_resolved_urls():
     assert "http://10.0.0.2:32000" in yaml_str
 
 
-def test_disagg_cluster_task_yaml_uses_two_node_best_network():
-    plan = make_plan()
+def test_cluster_placement_maps_prefill_and_decode_ranks():
+    plan = make_plan(decode=wp.Pool("1xH100", replicas=3))
+    placement = build_cluster_placement(plan)
+
+    assert placement.prefill_ranks == [0]
+    assert placement.decode_ranks == [1, 2, 3]
+    assert placement.num_nodes == 4
+
+
+def test_disagg_cluster_task_yaml_uses_multinode_best_network():
+    plan = make_plan(decode=wp.Pool("1xH100", replicas=3))
     yaml_str = build_disagg_cluster_task_yaml(plan=plan, session_id="abc12345")
 
     assert disagg_cluster_name(session_id="abc12345") in yaml_str
     assert "cloud: lambda" in yaml_str
     assert "accelerators: 'H100:1'" in yaml_str
-    assert "num_nodes: 2" in yaml_str
+    assert "num_nodes: 4" in yaml_str
     assert "network_tier: best" in yaml_str
     assert "SKYPILOT_NODE_RANK" in yaml_str
     assert "SKYPILOT_NODE_IPS" in yaml_str
+    assert "DECODE_URLS" in yaml_str
+    assert "seq 1 3" in yaml_str
     assert "wait_for_http" in yaml_str
     assert "PREFILL_PID" in yaml_str
     assert "${PREFILL_URL}/health" in yaml_str
@@ -82,10 +94,10 @@ def test_disagg_cluster_task_yaml_uses_two_node_best_network():
     assert yaml_str.count("accelerators:") == 1
 
 
-def test_disagg_cluster_task_rejects_multireplica_cloud_plan():
+def test_disagg_cluster_task_rejects_multireplica_prefill_cloud_plan():
     plan = make_plan(prefill=wp.Pool("1xH100", replicas=2))
 
-    with pytest.raises(ValidationError, match="replicas=1"):
+    with pytest.raises(ValidationError, match="prefill replicas=1"):
         build_disagg_cluster_task_yaml(plan=plan, session_id="abc12345")
 
 

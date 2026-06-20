@@ -81,6 +81,21 @@ def test_sglang_adapter_renders_prefill_decode_and_router():
     assert adapter.openai_base_url(plan) == "http://127.0.0.1:8000"
 
 
+def test_sglang_router_renders_multiple_decode_targets():
+    plan = compile(make_engine())
+    router = SGLangAdapter().render_router(
+        plan,
+        prefill_urls=["http://10.0.0.1:31000"],
+        decode_urls=["http://10.0.0.2:32000", "http://10.0.0.3:32000"],
+    )
+
+    assert router["argv"][router["argv"].index("--prefill") + 1] == "http://10.0.0.1:31000"
+    assert (
+        router["argv"][router["argv"].index("--decode") + 1]
+        == "http://10.0.0.2:32000,http://10.0.0.3:32000"
+    )
+
+
 def test_nixl_config_renders_transfer_settings():
     plan = compile(make_engine())
     config = NixlTransfer().configure(plan)

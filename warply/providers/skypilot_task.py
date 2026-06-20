@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shlex
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from warply.runtime.yaml import dump_yaml
@@ -23,8 +24,6 @@ _ROUTER_SETUP = """\
 pip install -U pip
 pip install 'sglang[all]'
 """
-
-_DISAGG_CLUSTER_NODES = 2
 
 _WAIT_HTTP_SCRIPT = """\
 wait_for_http() {
@@ -64,6 +63,16 @@ PY
 """
 
 
+@dataclass(frozen=True)
+class ClusterPlacement:
+    prefill_ranks: list[int]
+    decode_ranks: list[int]
+
+    @property
+    def num_nodes(self) -> int:
+        return len(self.prefill_ranks) + len(self.decode_ranks)
+
+
 def cluster_name(*, session_id: str, role: str, index: int) -> str:
     return f"warply-{session_id}-{role}-{index}"
 
@@ -87,6 +96,14 @@ def _cloud_field(cloud: str) -> str:
 def argv_to_command(module: str, argv: list[str]) -> str:
     parts = ["python", "-m", module, *argv]
     return " ".join(shlex.quote(part) for part in parts)
+
+
+def build_cluster_placement(plan: DeploymentPlan) -> ClusterPlacement:
+    _validate_disagg_cluster_plan(plan)
+    return ClusterPlacement(
+        prefill_ranks=[0],
+        decode_ranks=list(range(1, 1 + plan.decode.replicas)),
+    )
 
 
 def build_worker_task_yaml(
@@ -142,7 +159,7 @@ def build_router_task_yaml(
 
 def build_disagg_cluster_task_yaml(*, plan: DeploymentPlan, session_id: str) -> str:
     """Render one multi-node SkyPilot task for v0 prefill/decode disagg."""
-    _validate_disagg_cluster_plan(plan)
+    placement = build_cluster_placement(plan)
 
     from warply.engines.sglang import SGLangAdapter
 
@@ -159,12 +176,11 @@ def build_disagg_cluster_task_yaml(*, plan: DeploymentPlan, session_id: str) -> 
         mode="decode",
         port=plan.decode.base_port,
     )
-    router_plan = replace_routing_urls(
+    router = adapter.render_router(
         plan,
-        prefill_url="WARPLY_PREFILL_URL",
-        decode_url="WARPLY_DECODE_URL",
+        prefill_urls=["WARPLY_PREFILL_URL"],
+        decode_urls=["WARPLY_DECODE_URLS"],
     )
-    router = adapter.render_router(router_plan)
 
     prefill_command = argv_to_command(str(prefill["module"]), list(prefill["argv"]))
     decode_command = argv_to_command(str(decode["module"]), list(decode["argv"]))
@@ -175,21 +191,36 @@ def build_disagg_cluster_task_yaml(*, plan: DeploymentPlan, session_id: str) -> 
     run = f"""\
 set -euo pipefail
 {_WAIT_HTTP_SCRIPT}
+RANK="$SKYPILOT_NODE_RANK"
 PREFILL_HOST="$(echo "$SKYPILOT_NODE_IPS" | sed -n '1p')"
-DECODE_HOST="$(echo "$SKYPILOT_NODE_IPS" | sed -n '2p')"
 PREFILL_URL="http://${{PREFILL_HOST}}:{plan.prefill.base_port}"
-DECODE_URL="http://${{DECODE_HOST}}:{plan.decode.base_port}"
+DECODE_URLS=""
+for DECODE_RANK in $(seq 1 {plan.decode.replicas}); do
+  DECODE_LINE=$((DECODE_RANK + 1))
+  DECODE_HOST="$(echo "$SKYPILOT_NODE_IPS" | sed -n "${{DECODE_LINE}}p")"
+  DECODE_URL="http://${{DECODE_HOST}}:{plan.decode.base_port}"
+  if [ -z "$DECODE_URLS" ]; then
+    DECODE_URLS="$DECODE_URL"
+  else
+    DECODE_URLS="${{DECODE_URLS}},${{DECODE_URL}}"
+  fi
+done
 
-if [ "${{SKYPILOT_NODE_RANK}}" = "0" ]; then
+if [ "$RANK" = "0" ]; then
   {prefill_command} &
   PREFILL_PID=$!
   wait_for_http "${{PREFILL_URL}}/health" "prefill" "$PREFILL_PID"
-  wait_for_http "${{DECODE_URL}}/health" "decode"
+  OLD_IFS="$IFS"
+  IFS=","
+  for DECODE_URL in $DECODE_URLS; do
+    wait_for_http "${{DECODE_URL}}/health" "decode"
+  done
+  IFS="$OLD_IFS"
   {router_command}
-elif [ "${{SKYPILOT_NODE_RANK}}" = "1" ]; then
+elif [ "$RANK" -ge "1" ] && [ "$RANK" -le "{plan.decode.replicas}" ]; then
   {decode_command}
 else
-  echo "unsupported SKYPILOT_NODE_RANK=${{SKYPILOT_NODE_RANK}}" >&2
+  echo "unsupported SKYPILOT_NODE_RANK=${{RANK}}" >&2
   exit 1
 fi
 """
@@ -201,7 +232,7 @@ fi
                 plan.prefill.gpu_type,
                 plan.prefill.gpus_per_replica,
             ),
-            "num_nodes": _DISAGG_CLUSTER_NODES,
+            "num_nodes": placement.num_nodes,
             "network_tier": "best",
         },
         "setup": _WORKER_SETUP,
@@ -213,10 +244,10 @@ fi
 def _validate_disagg_cluster_plan(plan: DeploymentPlan) -> None:
     from warply.exceptions import ValidationError
 
-    if plan.prefill.replicas != 1 or plan.decode.replicas != 1:
+    if plan.prefill.replicas != 1:
         raise ValidationError(
-            "SkyPilot disagg cluster v0 requires replicas=1 for prefill and decode "
-            "(1:1 prefill-to-decode node ratio)."
+            "SkyPilot disagg cluster v0 requires prefill replicas=1. "
+            "Use decode replicas for 1:N scaling."
         )
     if plan.prefill.gpu_type != plan.decode.gpu_type:
         raise ValidationError("SkyPilot disagg cluster v0 requires matching GPU types.")

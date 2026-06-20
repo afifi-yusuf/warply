@@ -24,13 +24,13 @@ def test_skypilot_provider_rejects_multireplica_cluster():
     plan = make_engine(prefill=wp.Pool("1xH100", replicas=2)).plan()
     provider = SkyPilotProvider(plan=plan, session_id="test1234")
 
-    with pytest.raises(ValidationError, match="replicas=1"):
+    with pytest.raises(ValidationError, match="prefill replicas=1"):
         provider.provision_cluster()
 
 
-def test_lambda_up_dry_run(monkeypatch):
+def test_lambda_up_dry_run_with_decode_scaling(monkeypatch):
     monkeypatch.setenv("WARPLY_SKYPILOT_DRY_RUN", "1")
-    engine = make_engine()
+    engine = make_engine(decode=wp.Pool("1xH100", replicas=3))
 
     engine.up()
     status = engine.status()
@@ -39,7 +39,7 @@ def test_lambda_up_dry_run(monkeypatch):
     assert status.endpoint.startswith("http://dryrun.warply-")
     assert "disagg" in status.endpoint
     assert status.prefill.healthy_replicas == 1
-    assert status.decode.healthy_replicas == 1
+    assert status.decode.healthy_replicas == 3
     assert engine.deployed_plan() is not None
     assert engine.deployed_plan().routing.prefill_base_url == "warply://lambda/prefill"
     assert engine.deployed_plan().routing.decode_base_url == "warply://lambda/decode"
@@ -50,11 +50,12 @@ def test_lambda_up_dry_run(monkeypatch):
     assert engine._runtime is not None
     provider = engine._runtime.provider
     prefill_host = engine._runtime.prefill_nodes[0].host
-    decode_host = engine._runtime.decode_nodes[0].host
+    decode_hosts = [node.host for node in engine._runtime.decode_nodes]
     router_host = engine._runtime.router_nodes[0].host
-    assert prefill_host != decode_host
+    assert prefill_host not in decode_hosts
     assert "prefill" in prefill_host
-    assert "decode" in decode_host
+    assert len(decode_hosts) == 3
+    assert all("decode" in host for host in decode_hosts)
     assert router_host == status.endpoint.removeprefix("http://").split(":")[0]
 
     cluster_names = {
@@ -92,8 +93,8 @@ def test_cloud_up_failure_teardowns_cluster(monkeypatch):
         return ClusterLaunch(
             cluster_name=cluster_name,
             router_host="10.0.0.1",
-            prefill_host="10.0.0.1",
-            decode_host="10.0.0.2",
+            prefill_hosts=["10.0.0.1"],
+            decode_hosts=["10.0.0.2"],
         )
 
     def fail_ready(self, router_host: str) -> None:
@@ -133,10 +134,13 @@ def test_resolve_cluster_hosts_uses_internal_ips():
         def get_cluster_name():
             return "warply-test-disagg"
 
-    router_host, prefill_host, decode_host = SkyPilotProvider._resolve_cluster_hosts(_Handle())
+    router_host, prefill_hosts, decode_hosts = SkyPilotProvider._resolve_cluster_hosts(
+        _Handle(),
+        decode_replicas=1,
+    )
     assert router_host == "203.0.113.10"
-    assert prefill_host == "10.0.0.1"
-    assert decode_host == "10.0.0.2"
+    assert prefill_hosts == ["10.0.0.1"]
+    assert decode_hosts == ["10.0.0.2"]
 
 
 def test_resolve_cluster_hosts_preserves_internal_rank_order_without_external_ips():
@@ -151,7 +155,47 @@ def test_resolve_cluster_hosts_preserves_internal_rank_order_without_external_ip
         def get_cluster_name():
             return "warply-test-disagg"
 
-    router_host, prefill_host, decode_host = SkyPilotProvider._resolve_cluster_hosts(_Handle())
+    router_host, prefill_hosts, decode_hosts = SkyPilotProvider._resolve_cluster_hosts(
+        _Handle(),
+        decode_replicas=1,
+    )
     assert router_host == "203.0.113.10"
-    assert prefill_host == "10.0.0.1"
-    assert decode_host == "10.0.0.2"
+    assert prefill_hosts == ["10.0.0.1"]
+    assert decode_hosts == ["10.0.0.2"]
+
+
+def test_resolve_cluster_hosts_returns_all_decode_hosts():
+    class _Handle:
+        head_ip = "203.0.113.10"
+
+        @staticmethod
+        def internal_ips():
+            return ["10.0.0.1", "10.0.0.2", "10.0.0.3", "10.0.0.4"]
+
+        @staticmethod
+        def get_cluster_name():
+            return "warply-test-disagg"
+
+    router_host, prefill_hosts, decode_hosts = SkyPilotProvider._resolve_cluster_hosts(
+        _Handle(),
+        decode_replicas=3,
+    )
+    assert router_host == "203.0.113.10"
+    assert prefill_hosts == ["10.0.0.1"]
+    assert decode_hosts == ["10.0.0.2", "10.0.0.3", "10.0.0.4"]
+
+
+def test_resolve_cluster_hosts_rejects_too_few_internal_ips():
+    class _Handle:
+        head_ip = "203.0.113.10"
+
+        @staticmethod
+        def internal_ips():
+            return ["10.0.0.1", "10.0.0.2"]
+
+        @staticmethod
+        def get_cluster_name():
+            return "warply-test-disagg"
+
+    with pytest.raises(RuntimeError, match="could not resolve 4 node IPs"):
+        SkyPilotProvider._resolve_cluster_hosts(_Handle(), decode_replicas=3)

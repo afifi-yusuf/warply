@@ -49,10 +49,9 @@ engine.down()
 ```
 
 Cloud providers compile to `warply://` placeholders before launch. For v0, `cloud="lambda"`
-requires `replicas=1` for prefill and decode (a fixed **1:1 prefill-to-decode node ratio**),
-launches one 2-node SkyPilot cluster with `network_tier: best`, runs the router on the head
-node, waits for worker/router health before returning from `up()`, and resolves the public
-router endpoint after launch.
+supports one prefill node and one or more decode nodes, launches one SkyPilot cluster with
+`network_tier: best`, runs the router on the head node, waits for worker/router health before
+returning from `up()`, and resolves the public router endpoint after launch.
 
 For local dry-run testing of the Lambda path without GPUs or SkyPilot credentials
 (`WARPLY_SKYPILOT_DRY_RUN=1` uses the mock OpenAI client, so `generate()` works offline):
@@ -63,7 +62,7 @@ import warply as wp
 engine = wp.DisaggEngine(
     model='meta-llama/Llama-3.1-8B',
     prefill=wp.Pool('1xH100', replicas=1),
-    decode=wp.Pool('1xH100', replicas=1),
+    decode=wp.Pool('1xH100', replicas=2),
     cloud='lambda',
 )
 engine.up()

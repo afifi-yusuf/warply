@@ -12,7 +12,15 @@ class SGLangAdapter:
     def render_decode(self, plan: DeploymentPlan) -> dict[str, object]:
         return self.render_worker(plan=plan, pool=plan.decode, mode="decode")
 
-    def render_router(self, plan: DeploymentPlan) -> dict[str, object]:
+    def render_router(
+        self,
+        plan: DeploymentPlan,
+        *,
+        prefill_urls: list[str] | None = None,
+        decode_urls: list[str] | None = None,
+    ) -> dict[str, object]:
+        prefill_target = ",".join(prefill_urls) if prefill_urls else plan.routing.prefill_base_url
+        decode_target = ",".join(decode_urls) if decode_urls else plan.routing.decode_base_url
         return {
             "name": "sglang-router",
             "module": "sglang_router.launch_router",
@@ -23,9 +31,9 @@ class SGLangAdapter:
                 "--port",
                 str(plan.routing.router_port),
                 "--prefill",
-                plan.routing.prefill_base_url,
+                prefill_target,
                 "--decode",
-                plan.routing.decode_base_url,
+                decode_target,
             ],
             "env": {},
             "port": plan.routing.router_port,

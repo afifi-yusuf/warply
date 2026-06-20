@@ -23,8 +23,8 @@ class ClusterLaunch:
 
     cluster_name: str
     router_host: str
-    prefill_host: str
-    decode_host: str
+    prefill_hosts: list[str]
+    decode_hosts: list[str]
 
 
 class SkyPilotProvider:
@@ -49,19 +49,22 @@ class SkyPilotProvider:
         prefill = Node(
             id=f"{name}-prefill-0",
             role="prefill",
-            host=launch.prefill_host,
+            host=launch.prefill_hosts[0],
             port=self.plan.prefill.base_port,
             cluster_name=name,
             healthy=True,
         )
-        decode = Node(
-            id=f"{name}-decode-0",
-            role="decode",
-            host=launch.decode_host,
-            port=self.plan.decode.base_port,
-            cluster_name=name,
-            healthy=True,
-        )
+        decode_nodes = [
+            Node(
+                id=f"{name}-decode-{index}",
+                role="decode",
+                host=host,
+                port=self.plan.decode.base_port,
+                cluster_name=name,
+                healthy=True,
+            )
+            for index, host in enumerate(launch.decode_hosts)
+        ]
         router = Node(
             id=f"{name}-router",
             role="router",
@@ -71,7 +74,7 @@ class SkyPilotProvider:
             healthy=True,
         )
         self._router_node = router
-        return [prefill], [decode], router
+        return [prefill], decode_nodes, router
 
     def teardown(self, nodes: list[Node]) -> None:
         for node in nodes:
@@ -91,20 +94,26 @@ class SkyPilotProvider:
             return ClusterLaunch(
                 cluster_name=cluster_name,
                 router_host=router_host,
-                prefill_host=f"dryrun.{cluster_name}.prefill.example",
-                decode_host=f"dryrun.{cluster_name}.decode.example",
+                prefill_hosts=[f"dryrun.{cluster_name}.prefill.example"],
+                decode_hosts=[
+                    f"dryrun.{cluster_name}.decode-{index}.example"
+                    for index in range(self.plan.decode.replicas)
+                ],
             )
 
         sky = self._import_sky()
         task = sky.Task.from_yaml_str(yaml_str)
         request_id = sky.launch(task, cluster_name=cluster_name)
         _, handle = sky.stream_and_get(request_id)
-        router_host, prefill_host, decode_host = self._resolve_cluster_hosts(handle)
+        router_host, prefill_hosts, decode_hosts = self._resolve_cluster_hosts(
+            handle,
+            decode_replicas=self.plan.decode.replicas,
+        )
         return ClusterLaunch(
             cluster_name=cluster_name,
             router_host=router_host,
-            prefill_host=prefill_host,
-            decode_host=decode_host,
+            prefill_hosts=prefill_hosts,
+            decode_hosts=decode_hosts,
         )
 
     def _wait_for_router_ready(self, router_host: str) -> None:
@@ -146,31 +155,32 @@ class SkyPilotProvider:
         return sky
 
     @staticmethod
-    def _resolve_cluster_hosts(handle) -> tuple[str, str, str]:
-        """Return (router_host, prefill_host, decode_host) for ranks 0, 0, and 1."""
+    def _resolve_cluster_hosts(
+        handle,
+        *,
+        decode_replicas: int,
+    ) -> tuple[str, list[str], list[str]]:
+        """Return public router host plus internal prefill/decode hosts by rank."""
         router_host = SkyPilotProvider._resolve_head_ip(handle)
         node_ips = SkyPilotProvider._collect_node_ips(handle, fallback_head=router_host)
+        required_nodes = 1 + decode_replicas
 
-        if len(node_ips) >= 2:
-            return router_host, node_ips[0], node_ips[1]
-
-        if len(node_ips) == 1:
-            return router_host, node_ips[0], node_ips[0]
+        if len(node_ips) >= required_nodes:
+            return router_host, [node_ips[0]], node_ips[1:required_nodes]
 
         raise RuntimeError(
-            f"could not resolve node IPs for SkyPilot cluster "
-            f"{handle.get_cluster_name()!r}"
+            f"could not resolve {required_nodes} node IPs for SkyPilot cluster "
+            f"{handle.get_cluster_name()!r}; got {len(node_ips)}"
         )
 
     @staticmethod
     def _collect_node_ips(handle, *, fallback_head: str) -> list[str]:
-        ips: list[str] = []
-
         if hasattr(handle, "internal_ips"):
             raw = handle.internal_ips()
             if raw:
-                ips.extend(str(ip) for ip in raw if ip)
+                return [str(ip) for ip in raw if ip]
 
+        ips: list[str] = []
         if hasattr(handle, "external_ips"):
             raw = handle.external_ips()
             if raw:

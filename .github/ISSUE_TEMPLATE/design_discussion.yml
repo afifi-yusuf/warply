@@ -1,0 +1,37 @@
+name: Design discussion
+description: Discuss API, architecture, or implementation direction before a large change.
+title: "[Design]: "
+labels:
+  - design
+body:
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: What decision needs to be made?
+    validations:
+      required: true
+  - type: textarea
+    id: goals
+    attributes:
+      label: Goals and non-goals
+      description: What should this design accomplish, and what is intentionally out of scope?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: Describe the API, architecture, or implementation approach.
+    validations:
+      required: true
+  - type: textarea
+    id: tradeoffs
+    attributes:
+      label: Tradeoffs
+      description: What are the risks, migration concerns, or alternatives?
+  - type: textarea
+    id: open_questions
+    attributes:
+      label: Open questions
+      description: What feedback would help move this forward?

@@ -1,0 +1,84 @@
+name: Bug report
+description: Report something that is broken or behaving unexpectedly.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please avoid including secrets, tokens,
+        cloud credentials, private endpoint URLs, or proprietary model data.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened, and what did you expect instead?
+      placeholder: Warply did X, but I expected Y.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Provide a minimal reproduction when possible.
+      placeholder: |
+        1. Create an engine with ...
+        2. Run ...
+        3. See ...
+    validations:
+      required: true
+  - type: textarea
+    id: code
+    attributes:
+      label: Minimal code or config
+      description: Paste the smallest relevant snippet, with secrets removed.
+      render: python
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or traceback
+      description: Paste relevant output, with secrets removed.
+      render: text
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - SDK/API
+        - Compiler/planning
+        - Provider integration
+        - Router/client
+        - Health/lifecycle
+        - Tests/tooling
+        - Documentation
+        - Unsure
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Warply version or commit
+      placeholder: 0.0.1 or commit SHA
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      placeholder: Python 3.12.3
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, cloud provider, GPU type, backend, and relevant environment variables.
+      placeholder: macOS 15, cloud=local, backend=sglang, WARPLY_SKYPILOT_DRY_RUN=1
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I have searched existing issues.
+          required: true
+        - label: I have removed secrets and private data from this report.
+          required: true

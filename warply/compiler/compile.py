@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from warply.accelerators import accelerator_profile
 from warply.compiler.plan import DeploymentPlan, PoolPlan, PoolRole, ProvisionRequest, RoutingConfig
 from warply.pool import Pool
 
@@ -28,12 +29,14 @@ def _pool_plan(
     replicas: int,
 ) -> PoolPlan:
     gpu_count, gpu_type = _parse_gpu_spec(pool.gpus)
+    accelerator = accelerator_profile(gpu_type)
     provision = ProvisionRequest(
         role=role,
         cloud=cloud,
         gpu_type=gpu_type,
         gpus_per_replica=gpu_count,
         replicas=replicas,
+        accelerator=accelerator,
     )
     return PoolPlan(
         role=role,
@@ -42,6 +45,7 @@ def _pool_plan(
         gpus_per_replica=gpu_count,
         replicas=replicas,
         base_port=base_port,
+        accelerator=accelerator,
         provision=provision,
     )
 
@@ -65,6 +69,15 @@ def _routing_config(cloud: str) -> RoutingConfig:
     )
 
 
+def _resolve_kv_transfer(kv_transfer: str, prefill: PoolPlan, decode: PoolPlan) -> str | None:
+    both_cuda = prefill.accelerator.runtime == decode.accelerator.runtime == "cuda"
+    if kv_transfer == "nixl" and both_cuda:
+        return kv_transfer
+    if kv_transfer == "auto" and both_cuda:
+        return "nixl"
+    return None
+
+
 def compile(engine: DisaggEngine) -> DeploymentPlan:
     """Compile a DisaggEngine spec into a deterministic deployment plan."""
     prefill = _pool_plan(
@@ -85,6 +98,7 @@ def compile(engine: DisaggEngine) -> DeploymentPlan:
         model=engine.model,
         backend=engine.backend,
         kv_transfer=engine.kv_transfer,
+        resolved_kv_transfer=_resolve_kv_transfer(engine.kv_transfer, prefill, decode),
         cloud=engine.cloud,
         prefill=prefill,
         decode=decode,

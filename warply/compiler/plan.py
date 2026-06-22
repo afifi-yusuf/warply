@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from warply.accelerators import AcceleratorProfile
+
 PoolRole = Literal["prefill", "decode"]
 
 
@@ -15,6 +17,7 @@ class ProvisionRequest:
     gpu_type: str
     gpus_per_replica: int
     replicas: int
+    accelerator: AcceleratorProfile
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -23,6 +26,7 @@ class ProvisionRequest:
             "gpu_type": self.gpu_type,
             "gpus_per_replica": self.gpus_per_replica,
             "replicas": self.replicas,
+            "accelerator": self.accelerator.to_dict(),
         }
 
 
@@ -36,6 +40,7 @@ class PoolPlan:
     gpus_per_replica: int
     replicas: int
     base_port: int
+    accelerator: AcceleratorProfile
     provision: ProvisionRequest
 
     def to_dict(self) -> dict[str, Any]:
@@ -46,6 +51,7 @@ class PoolPlan:
             "gpus_per_replica": self.gpus_per_replica,
             "replicas": self.replicas,
             "base_port": self.base_port,
+            "accelerator": self.accelerator.to_dict(),
             "provision": self.provision.to_dict(),
         }
 
@@ -77,6 +83,7 @@ class DeploymentPlan:
     model: str
     backend: str
     kv_transfer: str
+    resolved_kv_transfer: str | None
     cloud: str
     prefill: PoolPlan
     decode: PoolPlan
@@ -87,6 +94,7 @@ class DeploymentPlan:
             "model": self.model,
             "backend": self.backend,
             "kv_transfer": self.kv_transfer,
+            "resolved_kv_transfer": self.resolved_kv_transfer,
             "cloud": self.cloud,
             "prefill": self.prefill.to_dict(),
             "decode": self.decode.to_dict(),

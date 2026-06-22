@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from warply.compiler.plan import DeploymentPlan, PoolPlan
+from warply.exceptions import ValidationError
 
 
 class SGLangAdapter:
@@ -54,6 +55,11 @@ class SGLangAdapter:
         port: int | None = None,
     ) -> dict[str, object]:
         worker_port = port if port is not None else pool.base_port
+        kv_transfer = plan.resolved_kv_transfer
+        if kv_transfer is None:
+            raise ValidationError(
+                "No supported SGLang KV transfer is resolved for this accelerator profile."
+            )
         return {
             "name": f"sglang-{mode}",
             "module": "sglang.launch_server",
@@ -69,7 +75,7 @@ class SGLangAdapter:
                 "--disaggregation-mode",
                 mode,
                 "--disaggregation-transfer-backend",
-                plan.kv_transfer,
+                kv_transfer,
             ],
             "env": {},
             "port": worker_port,

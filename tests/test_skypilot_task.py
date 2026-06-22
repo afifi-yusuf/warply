@@ -113,3 +113,14 @@ def test_disagg_cluster_task_rejects_mismatched_gpu_count():
 
     with pytest.raises(ValidationError, match="GPU counts"):
         build_disagg_cluster_task_yaml(plan=plan, session_id="abc12345")
+
+
+def test_disagg_cluster_task_rejects_amd_rocm_until_live_support_lands():
+    plan = make_plan(
+        prefill=wp.Pool("1xMI300X", replicas=1),
+        decode=wp.Pool("1xMI300X", replicas=1),
+        kv_transfer="auto",
+    )
+
+    with pytest.raises(ValidationError, match="AMD/ROCm cloud launch"):
+        build_disagg_cluster_task_yaml(plan=plan, session_id="abc12345")

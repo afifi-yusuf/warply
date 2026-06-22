@@ -20,6 +20,11 @@ pip install 'sglang[all]'
 pip install 'nixl[cu12]' || pip install nixl
 """
 
+_ROCM_WORKER_SETUP = """\
+echo "AMD/ROCm SGLang launch is not enabled in Warply yet." >&2
+exit 1
+"""
+
 _ROUTER_SETUP = """\
 pip install -U pip
 pip install 'sglang[all]'
@@ -244,6 +249,13 @@ fi
 def _validate_disagg_cluster_plan(plan: DeploymentPlan) -> None:
     from warply.exceptions import ValidationError
 
+    if plan.prefill.accelerator.runtime == "rocm" or plan.decode.accelerator.runtime == "rocm":
+        raise ValidationError(
+            "AMD/ROCm cloud launch is planned but not enabled yet; "
+            "export_yaml() works for inspection."
+        )
+    if plan.prefill.accelerator.runtime != "cuda" or plan.decode.accelerator.runtime != "cuda":
+        raise ValidationError("SkyPilot disagg cluster v0 requires known CUDA GPU profiles.")
     if plan.prefill.replicas != 1:
         raise ValidationError(
             "SkyPilot disagg cluster v0 requires prefill replicas=1. "

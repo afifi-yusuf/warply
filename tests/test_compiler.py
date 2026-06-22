@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import pytest
+
 import warply as wp
 from warply.compiler import compile
 from warply.engines.sglang import SGLangAdapter
+from warply.exceptions import ValidationError
 from warply.kv.nixl import NixlTransfer
 
 
@@ -24,6 +27,7 @@ def test_compile_plan_is_deterministic():
         "model": "meta-llama/Llama-3.1-70B",
         "backend": "sglang",
         "kv_transfer": "nixl",
+        "resolved_kv_transfer": "nixl",
         "cloud": "local",
         "prefill": {
             "role": "prefill",
@@ -32,12 +36,22 @@ def test_compile_plan_is_deterministic():
             "gpus_per_replica": 4,
             "replicas": 2,
             "base_port": 31000,
+            "accelerator": {
+                "gpu_type": "H100",
+                "vendor": "nvidia",
+                "runtime": "cuda",
+            },
             "provision": {
                 "role": "prefill",
                 "cloud": "local",
                 "gpu_type": "H100",
                 "gpus_per_replica": 4,
                 "replicas": 2,
+                "accelerator": {
+                    "gpu_type": "H100",
+                    "vendor": "nvidia",
+                    "runtime": "cuda",
+                },
             },
         },
         "decode": {
@@ -47,12 +61,22 @@ def test_compile_plan_is_deterministic():
             "gpus_per_replica": 2,
             "replicas": 4,
             "base_port": 32000,
+            "accelerator": {
+                "gpu_type": "H100",
+                "vendor": "nvidia",
+                "runtime": "cuda",
+            },
             "provision": {
                 "role": "decode",
                 "cloud": "local",
                 "gpu_type": "H100",
                 "gpus_per_replica": 2,
                 "replicas": 4,
+                "accelerator": {
+                    "gpu_type": "H100",
+                    "vendor": "nvidia",
+                    "runtime": "cuda",
+                },
             },
         },
         "routing": {
@@ -105,6 +129,40 @@ def test_nixl_config_renders_transfer_settings():
     assert config["env"]["WARPLY_KV_TRANSFER"] == "nixl"
 
 
+def test_auto_kv_transfer_resolves_to_nixl_for_cuda():
+    plan = compile(make_engine(kv_transfer="auto"))
+
+    assert plan.kv_transfer == "auto"
+    assert plan.resolved_kv_transfer == "nixl"
+    assert SGLangAdapter().render_decode(plan)["argv"][-1] == "nixl"
+
+
+def test_amd_pool_compiles_to_rocm_accelerator_profile():
+    plan = compile(
+        make_engine(
+            prefill=wp.Pool("1xMI300X", replicas=1),
+            decode=wp.Pool("1xMI300X", replicas=2),
+        )
+    )
+
+    assert plan.prefill.accelerator.vendor == "amd"
+    assert plan.prefill.accelerator.runtime == "rocm"
+    assert plan.decode.provision.accelerator.runtime == "rocm"
+    assert plan.resolved_kv_transfer is None
+
+
+def test_sglang_adapter_rejects_unresolved_rocm_transfer():
+    plan = compile(
+        make_engine(
+            prefill=wp.Pool("1xMI300X", replicas=1),
+            decode=wp.Pool("1xMI300X", replicas=1),
+        )
+    )
+
+    with pytest.raises(ValidationError, match="No supported SGLang KV transfer"):
+        SGLangAdapter().render_decode(plan)
+
+
 def test_export_yaml_contains_plan_sections():
     yaml = make_engine().export_yaml()
 
@@ -112,6 +170,7 @@ def test_export_yaml_contains_plan_sections():
     assert "prefill:" in yaml
     assert "decode:" in yaml
     assert "routing:" in yaml
+    assert "runtime: cuda" in yaml
 
 
 def test_plan_reflects_scaled_replicas():

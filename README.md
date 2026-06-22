@@ -77,6 +77,13 @@ For live Lambda integration (requires `pip install warply[cloud]`, SkyPilot + La
 WARPLY_INTEGRATION=1 pytest tests/test_integration_lambda.py
 ```
 
+### AMD / ROCm status
+
+Warply recognizes AMD Instinct pool specs such as `wp.Pool("1xMI300X")` and emits
+ROCm accelerator metadata in `engine.plan()` / `engine.export_yaml()`. Live AMD cloud
+launch is not enabled yet; the current SkyPilot launcher is validated for CUDA/SGLang/NIXL
+only and fails fast for ROCm plans until a ROCm image and transfer backend are validated.
+
 Context-manager sugar:
 
 ```python

@@ -1,6 +1,7 @@
 # Contributing to Warply
 
-Thanks for your interest in Warply. This project is early-stage; the public API is taking shape, but lifecycle and deployment wiring are still in progress.
+Thanks for your interest in Warply. This project is early-stage infrastructure software; the
+public API is taking shape while live GPU deployment paths are still being validated.
 
 ## Getting started
 
@@ -20,14 +21,13 @@ python -c "import warply as wp; print(wp.__version__)"
 
 ## What to work on
 
-Current focus (in order):
+Current focus:
 
-1. ~~SDK spec objects (`DisaggEngine`, `Pool`) + validation~~
-2. **Compiler** — translate spec → provisioning requests, SGLang disagg flags, routing config
-3. **Provider plugin** — wrap SkyPilot or Ray for one target cloud
-4. **Engine adapter** — SGLang prefill/decode rendering + NIXL KV transfer
-5. **Router + client** — basic P/D routing and OpenAI-compatible `client()`
-6. **Walking skeleton** — `up() → generate() → scale() → down()` end-to-end
+1. Validate live Lambda SGLang/NIXL serving with one prefill and N decode workers.
+2. Add minimal runtime facts through `engine.stats()`.
+3. Add vLLM as the next engine adapter.
+4. Explore Dynamo as an optional runtime target rather than a replacement for the SDK.
+5. Prepare ROCm support without claiming live AMD launch before it is tested.
 
 Check open issues and milestones before starting large work. If you plan a significant API or architecture change, open an issue first so we can align on scope.
 
@@ -43,16 +43,16 @@ Check open issues and milestones before starting large work. If you plan a signi
 
 ```bash
 # Lint
-ruff check warply
+ruff check warply tests
 
-# Format (if you use ruff format locally)
-ruff format warply
+# Tests
+pytest -q
 ```
 
-Run tests when present:
+Cloud/GPU integration is opt-in:
 
 ```bash
-pytest
+WARPLY_INTEGRATION=1 pytest tests/test_integration_lambda.py
 ```
 
 ## Pull requests
@@ -62,6 +62,7 @@ pytest
 3. Update `README.md` if you change user-visible behavior or the public API.
 4. Describe **what** changed and **why** in the PR body.
 5. Link related issues when applicable.
+6. Keep live cloud tests gated; do not make CI launch paid GPU resources.
 
 ## API stability
 

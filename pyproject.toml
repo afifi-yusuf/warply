@@ -34,8 +34,8 @@ cloud = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/afifi-yusuf/warply"
-Documentation = "https://github.com/afifi-yusuf/warply/blob/main/CONTRIBUTING.md"
+Homepage = "https://warply.ai"
+Documentation = "https://github.com/afifi-yusuf/warply#readme"
 Repository = "https://github.com/afifi-yusuf/warply"
 Issues = "https://github.com/afifi-yusuf/warply/issues"
 

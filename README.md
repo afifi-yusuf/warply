@@ -1,172 +1,179 @@
 # Warply
 
-**Warp-level control for disaggregated inference — without the kernel/k8s tax.**
+[![CI](https://github.com/afifi-yusuf/warply/actions/workflows/ci.yml/badge.svg)](https://github.com/afifi-yusuf/warply/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](./pyproject.toml)
 
-Warply is a Python control plane for disaggregated, self-improving inference. Launch prefill/decode deployments, scale pools independently, and move workloads across clouds — all from `import warply`, not Kubernetes YAML.
+**Python control plane for inference and self-improving systems.**
 
-> **Status:** Early development. The SDK API is defined; lifecycle and deployment wiring are in progress.
+Warply turns serving intent into a runnable deployment plan: prefill/decode pools,
+SkyPilot provisioning, SGLang launch flags, NIXL KV transfer, router endpoints, and an
+OpenAI-compatible client. The goal is to make advanced LLM serving programmable from
+`import warply`, without asking every researcher or startup to own Kubernetes, CRDs, or
+per-cloud launch glue.
+
+Learn more at [warply.ai](https://warply.ai).
+
+> **Status:** Pre-alpha. Local mock lifecycle, compiler/export, SGLang/NIXL adapters,
+> OpenAI-compatible HTTP client, and SkyPilot Lambda dry-run paths are implemented. Live GPU
+> integration remains gated and experimental.
 
 ## Why Warply?
 
-Disaggregation mechanisms (prefill/decode separation, KV-cache transfer, routing) are increasingly commoditized — vLLM, SGLang, TensorRT-LLM, NVIDIA Dynamo, and llm-d all ship them. What's still missing is a **clean, programmable control plane** over those mechanisms.
+High-performance inference mechanisms are becoming substrate. Engines and runtimes such as
+[vLLM](https://github.com/vllm-project/vllm), [SGLang](https://github.com/sgl-project/sglang),
+[Dynamo](https://github.com/ai-dynamo/dynamo), TensorRT-LLM, and llm-d already expose serious
+serving capabilities: optimized kernels, disaggregated prefill/decode, KV-aware routing,
+continuous batching, and multi-node execution.
 
-| Tool | Gap Warply fills |
+Warply's wedge is the **user-facing control plane** above those mechanisms:
+
+- Launch and tear down model-serving systems from Python.
+- Compile one declarative spec into provisioning, engine, KV-transfer, and routing plans.
+- Scale prefill/decode pools independently as the workload changes.
+- Keep cloud provisioning, runtime selection, and client binding behind a small SDK.
+- Grow toward rollout, eval, and RL/self-improvement workflows without changing the user's entrypoint.
+
+If you already operate a mature Kubernetes inference platform, Dynamo or llm-d may be the right
+runtime. Warply is for the path where you want a Python object to create, inspect, and control
+that system across clouds.
+
+## What Works Today
+
+| Area | Current support |
 | --- | --- |
-| SkyPilot / SkyServe | Multicloud provisioning, but disagg-unaware |
-| NVIDIA Dynamo / llm-d | Strong disagg, but k8s/ops-heavy and not Python-first |
-| verl / OpenRLHF | RL orchestration, not a portable serving control plane |
-| Managed APIs (Modal, etc.) | Black-box; little control over disagg internals |
+| SDK | `DisaggEngine`, `Pool`, `up()`, `down()`, `scale()` for local mock, `client()`, `generate()` |
+| Compiler | Deterministic `DeploymentPlan`, `engine.plan()`, `engine.export_yaml()` |
+| Engine | SGLang adapter for prefill, decode, and router process configs |
+| KV transfer | NIXL for CUDA plans; `kv_transfer="auto"` resolves to NIXL on known CUDA GPUs |
+| Cloud | SkyPilot Lambda/CoreWeave provider skeleton; Lambda dry-run and task rendering |
+| Placement | One prefill node plus N decode nodes in one SkyPilot multi-node cluster |
+| Client | Mock local client plus OpenAI-compatible HTTP client for deployed routers |
+| Hardware planning | CUDA and ROCm accelerator profiles; live ROCm launch intentionally disabled |
 
-Warply sits at the intersection: **SkyPilot's portability + Dynamo's disagg intelligence + researcher-friendly Python**.
+## Quick Start
 
-## Quick start
+Install from source:
 
 ```bash
 git clone https://github.com/afifi-yusuf/warply.git
 cd warply
-pip install -e .
+pip install -e ".[dev]"
 ```
+
+Run the no-GPU local lifecycle:
 
 ```python
 import warply as wp
 
 engine = wp.DisaggEngine(
     model="meta-llama/Llama-3.1-8B",
-    prefill=wp.Pool(gpus="1xH100", replicas=1),
-    decode=wp.Pool(gpus="1xH100", replicas=1),
+    prefill=wp.Pool("1xH100", replicas=1),
+    decode=wp.Pool("1xH100", replicas=1),
     backend="sglang",
     kv_transfer="nixl",
     cloud="local",
 )
 
-engine.up()                       # mock provision + route; no GPU required
-client = engine.client()
-resp = client.chat.completions.create(
-    model="warply",
-    messages=[{"role": "user", "content": "hello"}],
-)
+engine.up()
+print(engine.generate("hello"))
+print(engine.status())
 engine.down()
 ```
 
-Cloud providers compile to `warply://` placeholders before launch. For v0, `cloud="lambda"`
-supports one prefill node and one or more decode nodes, launches one SkyPilot cluster with
-`network_tier: best`, runs the router on the head node, waits for worker/router health before
-returning from `up()`, and resolves the public router endpoint after launch.
+Inspect the compiled plan:
 
-For local dry-run testing of the Lambda path without GPUs or SkyPilot credentials
-(`WARPLY_SKYPILOT_DRY_RUN=1` uses the mock OpenAI client, so `generate()` works offline):
+```python
+print(engine.plan())
+print(engine.export_yaml())
+```
+
+## Cloud Dry Run
+
+Use `WARPLY_SKYPILOT_DRY_RUN=1` to exercise the Lambda control path without GPUs, SkyPilot
+credentials, or cloud spend:
 
 ```bash
-WARPLY_SKYPILOT_DRY_RUN=1 python -c "
+WARPLY_SKYPILOT_DRY_RUN=1 python - <<'PY'
 import warply as wp
+
 engine = wp.DisaggEngine(
-    model='meta-llama/Llama-3.1-8B',
-    prefill=wp.Pool('1xH100', replicas=1),
-    decode=wp.Pool('1xH100', replicas=2),
-    cloud='lambda',
+    model="meta-llama/Llama-3.1-8B",
+    prefill=wp.Pool("1xH100", replicas=1),
+    decode=wp.Pool("1xH100", replicas=2),
+    cloud="lambda",
 )
 engine.up()
 print(engine.status().endpoint)
 engine.down()
-"
+PY
 ```
 
-For live Lambda integration (requires `pip install warply[cloud]`, SkyPilot + Lambda setup):
+For live Lambda integration, install cloud extras and opt in explicitly:
 
 ```bash
+pip install -e ".[cloud,dev]"
 WARPLY_INTEGRATION=1 pytest tests/test_integration_lambda.py
 ```
 
-### AMD / ROCm status
+Live integration may launch paid GPU instances.
 
-Warply recognizes AMD Instinct pool specs such as `wp.Pool("1xMI300X")` and emits
-ROCm accelerator metadata in `engine.plan()` / `engine.export_yaml()`. Live AMD cloud
-launch is not enabled yet; the current SkyPilot launcher is validated for CUDA/SGLang/NIXL
-only and fails fast for ROCm plans until a ROCm image and transfer backend are validated.
+## Current Limits
 
-Context-manager sugar:
+- `cloud="local"` is a mock runtime; it does not start SGLang.
+- Live cloud `scale()` is not implemented yet; relaunch with a new spec.
+- Cloud disagg currently supports `prefill.replicas == 1` and `decode.replicas >= 1`.
+- CUDA/SGLang/NIXL is the only live target under active validation.
+- AMD Instinct specs such as `wp.Pool("1xMI300X")` compile to ROCm-aware plans, but live ROCm
+  launch fails fast until a ROCm image and transfer backend such as MORI are validated.
+- KV-aware routing, stats, vLLM/TensorRT-LLM adapters, Dynamo runtime integration, and RL loops
+  are roadmap items.
 
-```python
-with wp.DisaggEngine(...) as engine:
-    print(engine.generate("hello"))
+## Architecture
+
+```text
+DisaggEngine spec
+  -> compiler
+  -> DeploymentPlan
+  -> provider adapter      SkyPilot, local mock, future direct providers
+  -> engine adapter        SGLang now; vLLM / TensorRT-LLM later
+  -> KV adapter            NIXL now; MORI / Mooncake / LMCache candidates later
+  -> router + client       OpenAI-compatible endpoint
 ```
 
-## MVP scope (v0)
-
-- `DisaggEngine` Python API: declarative spec + `up()` / `scale()` / `down()` / `client()`
-- Disaggregated prefill/decode on **one** cloud
-- Independent prefill and decode pool scaling
-- SGLang engine adapter + NIXL KV transfer
-- Basic P/D routing; OpenAI-compatible client from the engine
-- Optional `export_yaml()` escape hatch
-
-**Not in v0:** multicloud arbitrage, KV-aware routing, RL/RSI loops, AFD disaggregation. See the [roadmap](#roadmap) below.
+Warply is intentionally Python-first. Hot-path serving remains inside engines and runtimes that
+already specialize in kernels, batching, scheduling, and transport.
 
 ## Roadmap
 
 | Phase | Focus |
 | --- | --- |
-| **0 (now)** | Single-cloud disagg serving via Python SDK |
-| **1** | Multicloud providers, KV-aware routing, vLLM/TRT-LLM adapters, RL rollout primitives |
-| **2** | Managed control plane, enterprise features, advanced disagg for MoE |
+| Phase 0 | Validate live SGLang/NIXL Lambda serving, add `engine.stats()`, improve 1:N P/D scaling |
+| Phase 1 | vLLM adapter, Dynamo runtime target, KV-aware routing, AWS/CoreWeave polish |
+| Phase 2 | RL rollout pools, eval/judge pools, self-improvement workflows, policy-driven scaling |
+| Later | ROCm live launch, TensorRT-LLM adapter, richer observability, managed control plane |
 
-## Design
-
-Warply is a layered control plane:
-
-1. **SDK** — `DisaggEngine` spec + lifecycle methods
-2. **Compiler** — spec → provisioning + engine flags + routing
-3. **Plugins** — provider, engine, and KV-transfer backends
-4. **Router** — prefill pool → decode pool
-5. **Observability** — status and health hooks
-
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for development setup and current build priorities.
+Track planned work in [GitHub issues](https://github.com/afifi-yusuf/warply/issues).
 
 ## Development
 
 ```bash
 pip install -e ".[dev]"
-python -c "import warply as wp; print(wp.__version__)"
+ruff check warply tests
+pytest -q
 ```
 
-No local GPU is required for the current walking skeleton. The `cloud="local"` path uses a
-mock provider/router so SDK lifecycle tests can exercise `up()`, `generate()`, `scale()`, and
-`down()` without starting SGLang.
+CI runs the same checks on Python 3.10, 3.11, and 3.12. GPU/cloud tests are skipped unless
+explicitly enabled with `WARPLY_INTEGRATION=1`.
 
-```python
-with wp.DisaggEngine(
-    model="meta-llama/Llama-3.1-8B",
-    prefill=wp.Pool("1xH100"),
-    decode=wp.Pool("1xH100"),
-    cloud="local",
-) as engine:
-    print(engine.generate("hello"))
-```
+## Community
 
-For compiler debugging, use `engine.plan()` for the structured `DeploymentPlan` or
-`engine.export_yaml()` for a YAML view of the same artifact.
-
-Current build order:
-
-1. ~~`DisaggEngine` / `Pool` spec + validation~~
-2. ~~Compiler: spec → SGLang disagg flags + routing~~
-3. ~~Provider plugin skeleton + SGLang adapter + NIXL transfer~~
-4. ~~Mock local router + OpenAI-compatible `client()`~~
-5. ~~No-GPU walking skeleton: `up() → generate() → scale() → down()`~~
-6. ~~SkyPilot Lambda provider implementation~~
-7. GPU-gated SGLang/NIXL integration test on Lambda
-
-Cloud integration tests are intentionally gated. Once the SkyPilot provider is wired, run them
-from an environment with credentials and GPUs:
-
-```bash
-WARPLY_INTEGRATION=1 pytest tests/test_integration_lambda.py
-```
-
-## Contributing
-
-Contributions welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md).
+- Website: [warply.ai](https://warply.ai)
+- Issues: [bugs, feature requests, and design discussions](https://github.com/afifi-yusuf/warply/issues)
+- Contributing guide: [CONTRIBUTING.md](./CONTRIBUTING.md)
+- Security policy: [SECURITY.md](./SECURITY.md)
+- Code of conduct: [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)
 
 ## License
 
-Apache 2.0 — see [LICENSE](./LICENSE).
+Apache 2.0. See [LICENSE](./LICENSE).

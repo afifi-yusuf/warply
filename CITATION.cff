@@ -1,0 +1,12 @@
+cff-version: 1.2.0
+message: "If you use Warply in research, please cite the repository."
+title: "Warply"
+abstract: "Python control plane for inference and self-improving systems."
+authors:
+  - family-names: "Afifi"
+    given-names: "Yusuf"
+license: "Apache-2.0"
+repository-code: "https://github.com/afifi-yusuf/warply"
+url: "https://warply.ai"
+version: "0.0.1"
+date-released: "2026-06-23"

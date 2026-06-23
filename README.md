@@ -20,13 +20,11 @@ Learn more at [warply.ai](https://warply.ai).
 
 ## Why Warply?
 
-High-performance inference mechanisms are becoming substrate. Engines and runtimes such as
-[vLLM](https://github.com/vllm-project/vllm), [SGLang](https://github.com/sgl-project/sglang),
-[Dynamo](https://github.com/ai-dynamo/dynamo), TensorRT-LLM, and llm-d already expose serious
-serving capabilities: optimized kernels, disaggregated prefill/decode, KV-aware routing,
-continuous batching, and multi-node execution.
+Modern LLM serving stacks are powerful, but stitching together GPUs, clouds, engine flags,
+KV-transfer settings, routing, health checks, and client endpoints still takes too much bespoke
+infrastructure work.
 
-Warply's wedge is the **user-facing control plane** above those mechanisms:
+Warply focuses on the **user-facing control plane**:
 
 - Launch and tear down model-serving systems from Python.
 - Compile one declarative spec into provisioning, engine, KV-transfer, and routing plans.
@@ -34,9 +32,9 @@ Warply's wedge is the **user-facing control plane** above those mechanisms:
 - Keep cloud provisioning, runtime selection, and client binding behind a small SDK.
 - Grow toward rollout, eval, and RL/self-improvement workflows without changing the user's entrypoint.
 
-If you already operate a mature Kubernetes inference platform, Dynamo or llm-d may be the right
-runtime. Warply is for the path where you want a Python object to create, inspect, and control
-that system across clouds.
+The intent is simple: a researcher or small team should be able to describe the serving system
+they want, launch it on their cloud, inspect what was deployed, and iterate without becoming a
+full-time inference infrastructure team.
 
 ## What Works Today
 

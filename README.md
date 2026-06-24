@@ -48,6 +48,7 @@ full-time inference infrastructure team.
 | Placement | One prefill node plus N decode nodes in one SkyPilot multi-node cluster |
 | Client | Mock local client plus OpenAI-compatible HTTP client for deployed routers |
 | Hardware planning | CUDA and ROCm accelerator profiles; live ROCm launch intentionally disabled |
+| Speculative decoding | Config and plan export scaffold for engine-native, MTP, EAGLE, DFlash, and draft-model modes |
 
 ## Quick Start
 
@@ -124,6 +125,8 @@ Live integration may launch paid GPU instances.
 - CUDA/SGLang/NIXL is the only live target under active validation.
 - AMD Instinct specs such as `wp.Pool("1xMI300X")` compile to ROCm-aware plans, but live ROCm
   launch fails fast until a ROCm image and transfer backend such as MORI are validated.
+- Speculative decoding modes compile/export, but backend launch flags are not enabled until exact
+  SGLang/vLLM support is validated.
 - KV-aware routing, stats, vLLM/TensorRT-LLM adapters, Dynamo runtime integration, and RL loops
   are roadmap items.
 
@@ -147,7 +150,7 @@ already specialize in kernels, batching, scheduling, and transport.
 | Phase | Focus |
 | --- | --- |
 | Phase 0 | Validate live SGLang/NIXL Lambda serving, add `engine.stats()`, improve 1:N P/D scaling |
-| Phase 1 | vLLM adapter, Dynamo runtime target, KV-aware routing, AWS/CoreWeave polish |
+| Phase 1 | vLLM adapter, speculative decoding launch support, KV-aware routing, AWS/CoreWeave polish |
 | Phase 2 | RL rollout pools, eval/judge pools, self-improvement workflows, policy-driven scaling |
 | Later | ROCm live launch, TensorRT-LLM adapter, richer observability, managed control plane |
 

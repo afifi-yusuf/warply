@@ -29,6 +29,13 @@ def test_compile_plan_is_deterministic():
         "kv_transfer": "nixl",
         "resolved_kv_transfer": "nixl",
         "cloud": "local",
+        "speculation": {
+            "enabled": False,
+            "mode": "none",
+            "draft_model": None,
+            "speculator_model": None,
+            "max_draft_tokens": None,
+        },
         "prefill": {
             "role": "prefill",
             "gpus": "4xH100",
@@ -103,6 +110,36 @@ def test_sglang_adapter_renders_prefill_decode_and_router():
     assert "2" in decode["argv"]
     assert "--pd-disaggregation" in router["argv"]
     assert adapter.openai_base_url(plan) == "http://127.0.0.1:8000"
+
+
+def test_speculation_config_compiles_into_plan():
+    plan = compile(
+        make_engine(
+            speculation=wp.Speculation(
+                mode="eagle",
+                speculator_model="warply/speculator-eagle",
+                max_draft_tokens=8,
+            )
+        )
+    )
+
+    assert plan.speculation.enabled
+    assert plan.speculation.mode == "eagle"
+    assert plan.speculation.speculator_model == "warply/speculator-eagle"
+    assert plan.to_dict()["speculation"] == {
+        "enabled": True,
+        "mode": "eagle",
+        "draft_model": None,
+        "speculator_model": "warply/speculator-eagle",
+        "max_draft_tokens": 8,
+    }
+
+
+def test_sglang_adapter_rejects_speculation_until_flags_are_validated():
+    plan = compile(make_engine(speculation=wp.Speculation(mode="mtp", max_draft_tokens=4)))
+
+    with pytest.raises(ValidationError, match="Speculative decoding"):
+        SGLangAdapter().render_decode(plan)
 
 
 def test_sglang_router_renders_multiple_decode_targets():

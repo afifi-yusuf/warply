@@ -3,12 +3,14 @@
 from warply.engine import DisaggEngine
 from warply.exceptions import HTTPClientError, NotReadyError, ValidationError
 from warply.pool import Pool
+from warply.speculation import Speculation
 
 __all__ = [
     "DisaggEngine",
     "HTTPClientError",
     "NotReadyError",
     "Pool",
+    "Speculation",
     "ValidationError",
     "__version__",
 ]

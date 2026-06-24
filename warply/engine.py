@@ -12,6 +12,7 @@ from warply.runtime.client import completion_content
 from warply.runtime.factory import create_runtime
 from warply.runtime.lifecycle import state_after_down
 from warply.runtime.yaml import dump_yaml
+from warply.speculation import Speculation
 from warply.types import DeploymentStatus, EngineState, PoolStatus
 
 if TYPE_CHECKING:
@@ -36,6 +37,7 @@ class DisaggEngine:
     backend: str = "sglang"
     kv_transfer: str = "nixl"
     cloud: str = "local"
+    speculation: Speculation = field(default_factory=Speculation)
     _state: EngineState = field(default=EngineState.PENDING, init=False, repr=False)
     _prefill_replicas: int | None = field(default=None, init=False, repr=False)
     _decode_replicas: int | None = field(default=None, init=False, repr=False)
@@ -48,6 +50,8 @@ class DisaggEngine:
         _validate_choice("backend", self.backend, SUPPORTED_BACKENDS)
         _validate_choice("kv_transfer", self.kv_transfer, SUPPORTED_KV_TRANSFERS)
         _validate_choice("cloud", self.cloud, SUPPORTED_CLOUDS)
+        if not isinstance(self.speculation, Speculation):
+            raise ValidationError("speculation must be a warply.Speculation instance.")
 
         if self._prefill_replicas is None:
             self._prefill_replicas = self.prefill.replicas

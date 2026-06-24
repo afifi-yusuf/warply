@@ -16,6 +16,7 @@ Warply is pre-1.0; public APIs may still change as the deployment model is valid
 - SkyPilot task rendering and dry-run provider path for Lambda-style cloud launches.
 - OpenAI-compatible HTTP client wrapper for deployed router endpoints.
 - CUDA and ROCm accelerator planning metadata.
+- Speculative decoding config scaffold for engine-native, MTP, EAGLE, DFlash, and draft-model modes.
 - GitHub Actions CI for Python 3.10, 3.11, and 3.12.
 
 ### Known Limits
@@ -23,3 +24,4 @@ Warply is pre-1.0; public APIs may still change as the deployment model is valid
 - Live GPU integration is experimental and gated behind `WARPLY_INTEGRATION=1`.
 - Cloud `scale()` after `up()` is not implemented yet.
 - ROCm plans compile/export, but live AMD launch is not enabled.
+- Speculative decoding plans compile/export, but engine launch flags are not enabled yet.

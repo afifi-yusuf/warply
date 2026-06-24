@@ -100,6 +100,7 @@ def compile(engine: DisaggEngine) -> DeploymentPlan:
         kv_transfer=engine.kv_transfer,
         resolved_kv_transfer=_resolve_kv_transfer(engine.kv_transfer, prefill, decode),
         cloud=engine.cloud,
+        speculation=engine.speculation,
         prefill=prefill,
         decode=decode,
         routing=_routing_config(engine.cloud),

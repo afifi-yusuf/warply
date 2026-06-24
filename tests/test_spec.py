@@ -53,6 +53,7 @@ class TestEngineValidation:
         engine = make_engine()
         assert engine.backend == "sglang"
         assert engine.kv_transfer == "nixl"
+        assert engine.speculation.mode == "none"
 
     def test_empty_model_rejected(self):
         with pytest.raises(ValidationError):
@@ -69,6 +70,29 @@ class TestEngineValidation:
     def test_unsupported_cloud(self):
         with pytest.raises(ValidationError):
             make_engine(cloud="gcp")
+
+    @pytest.mark.parametrize("mode", ["engine_native", "mtp"])
+    def test_speculation_modes_without_models(self, mode):
+        engine = make_engine(speculation=wp.Speculation(mode=mode, max_draft_tokens=4))
+        assert engine.speculation.enabled
+        assert engine.speculation.mode == mode
+
+    def test_draft_model_speculation_requires_draft_model(self):
+        with pytest.raises(ValidationError, match="draft_model"):
+            wp.Speculation(mode="draft_model")
+
+    @pytest.mark.parametrize("mode", ["eagle", "dflash"])
+    def test_speculator_modes_require_speculator_model(self, mode):
+        with pytest.raises(ValidationError, match="speculator_model"):
+            wp.Speculation(mode=mode)
+
+    def test_speculation_rejects_bad_max_draft_tokens(self):
+        with pytest.raises(ValidationError, match="max_draft_tokens"):
+            wp.Speculation(mode="mtp", max_draft_tokens=0)
+
+    def test_engine_requires_speculation_object(self):
+        with pytest.raises(ValidationError, match="Speculation"):
+            make_engine(speculation={"mode": "mtp"})
 
 
 class TestStatus:

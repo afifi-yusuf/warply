@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from warply.accelerators import AcceleratorProfile
+from warply.speculation import Speculation
 
 PoolRole = Literal["prefill", "decode"]
 
@@ -85,6 +86,7 @@ class DeploymentPlan:
     kv_transfer: str
     resolved_kv_transfer: str | None
     cloud: str
+    speculation: Speculation
     prefill: PoolPlan
     decode: PoolPlan
     routing: RoutingConfig
@@ -96,6 +98,7 @@ class DeploymentPlan:
             "kv_transfer": self.kv_transfer,
             "resolved_kv_transfer": self.resolved_kv_transfer,
             "cloud": self.cloud,
+            "speculation": self.speculation.to_dict(),
             "prefill": self.prefill.to_dict(),
             "decode": self.decode.to_dict(),
             "routing": self.routing.to_dict(),

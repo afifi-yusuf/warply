@@ -55,6 +55,10 @@ class SGLangAdapter:
         port: int | None = None,
     ) -> dict[str, object]:
         worker_port = port if port is not None else pool.base_port
+        if plan.speculation.enabled:
+            raise ValidationError(
+                "Speculative decoding is planned but not enabled for the SGLang adapter yet."
+            )
         kv_transfer = plan.resolved_kv_transfer
         if kv_transfer is None:
             raise ValidationError(

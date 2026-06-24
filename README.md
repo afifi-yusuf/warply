@@ -167,6 +167,7 @@ explicitly enabled with `WARPLY_INTEGRATION=1`.
 ## Community
 
 - Website: [warply.ai](https://warply.ai)
+- Provider status: [docs/providers.md](./docs/providers.md)
 - Issues: [bugs, feature requests, and design discussions](https://github.com/afifi-yusuf/warply/issues)
 - Contributing guide: [CONTRIBUTING.md](./CONTRIBUTING.md)
 - Security policy: [SECURITY.md](./SECURITY.md)
